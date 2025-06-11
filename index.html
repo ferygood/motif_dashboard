@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genomic Data Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.24.1/plotly.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+
+        .sidebar {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .chart-container, .table-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .filter-section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .filter-section h3 {
+            color: #4a5568;
+            margin-bottom: 15px;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .filter-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            transform: translateY(0);
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            opacity: 0.9;
+        }
+
+        #dataTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        #dataTable th, #dataTable td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        #dataTable th {
+            background: #f7fafc;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #dataTable th:hover {
+            background: #edf2f7;
+        }
+
+        #dataTable tr:hover {
+            background: #f7fafc;
+        }
+
+        .table-wrapper {
+            height: 100%;
+            overflow: auto;
+        }
+
+        .reset-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .reset-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #2d3748;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧬 Genomic Data Interactive Dashboard</h1>
+            <p>Visualize and analyze genomic motif data with advanced filtering and interactive charts</p>
+        </div>
+
+        <div class="dashboard">
+            <div class="sidebar">
+                <div class="filter-section">
+                    <h3>📊 Data Overview</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalRecords">0</div>
+                            <div class="stat-label">Total Records</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="uniqueChromosomes">0</div>
+                            <div class="stat-label">Chromosomes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="uniqueMotifs">0</div>
+                            <div class="stat-label">Motifs</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="filter-section">
+                    <h3>🔍 Filters</h3>
+                    
+                    <div class="filter-group">
+                        <label for="chromosomeFilter">Chromosome</label>
+                        <select id="chromosomeFilter">
+                            <option value="">All Chromosomes</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="motifFilter">Motif</label>
+                        <select id="motifFilter">
+                            <option value="">All Motifs</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="strandFilter">Strand</label>
+                        <select id="strandFilter">
+                            <option value="">All Strands</option>
+                            <option value="+">+ (Positive)</option>
+                            <option value="-">- (Negative)</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="classFilter">Class</label>
+                        <select id="classFilter">
+                            <option value="">All Classes</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="familyFilter">TE Family</label>
+                        <select id="familyFilter">
+                            <option value="">All Families</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="pvalueFilter">Max P-value</label>
+                        <input type="number" id="pvalueFilter" step="1e-10" placeholder="e.g., 1e-8">
+                    </div>
+
+                    <div class="filter-group">
+                        <label for="lengthFilter">Min Length</label>
+                        <input type="number" id="lengthFilter" placeholder="e.g., 20">
+                    </div>
+                </div>
+
+                <button class="reset-btn" onclick="resetFilters()">Reset All Filters</button>
+            </div>
+
+            <div class="main-content">
+                <div class="chart-container">
+                    <div class="chart-title">Distribution of Hits by Chromosome</div>
+                    <div id="chromosomeChart" style="height: calc(100% - 40px);"></div>
+                </div>
+
+                <div class="table-container">
+                    <div class="chart-title">Filtered Data Table</div>
+                    <div class="table-wrapper">
+                        <table id="dataTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortTable(0)">CHR</th>
+                                    <th onclick="sortTable(1)">START</th>
+                                    <th onclick="sortTable(2)">END</th>
+                                    <th onclick="sortTable(3)">MOTIF</th>
+                                    <th onclick="sortTable(4)">STRAND</th>
+                                    <th onclick="sortTable(5)">P-VALUE</th>
+                                    <th onclick="sortTable(6)">TE FAMILY</th>
+                                    <th onclick="sortTable(7)">CLASS</th>
+                                    <th onclick="sortTable(8)">LENGTH</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data with the provided examples plus additional synthetic data
+        let originalData = [
+            {
+                chr: 'chr2',
+                start: 227070450,
+                end: 227070471,
+                motif: 'MA1987.1',
+                strand: '-',
+                pvalue: 1.08e-09,
+                tefamily: 'HAL1',
+                class: 'L1',
+                length: 21
+            },
+            {
+                chr: 'chr4',
+                start: 179300015,
+                end: 179300036,
+                motif: 'MA1987.1',
+                strand: '+',
+                pvalue: 2.38e-09,
+                tefamily: 'L1PA8A',
+                class: 'L1',
+                length: 21
+            },
+            // Additional synthetic data for demonstration
+            {
+                chr: 'chr1',
+                start: 123456789,
+                end: 123456810,
+                motif: 'MA0001.1',
+                strand: '+',
+                pvalue: 5.67e-10,
+                tefamily: 'Alu',
+                class: 'SINE',
+                length: 21
+            },
+            {
+                chr: 'chr3',
+                start: 987654321,
+                end: 987654342,
+                motif: 'MA0002.2',
+                strand: '-',
+                pvalue: 3.45e-08,
+                tefamily: 'LTR1',
+                class: 'LTR',
+                length: 21
+            },
+            {
+                chr: 'chrX',
+                start: 555444333,
+                end: 555444354,
+                motif: 'MA1987.1',
+                strand: '+',
+                pvalue: 1.23e-07,
+                tefamily: 'LINE1',
+                class: 'LINE',
+                length: 21
+            },
+            {
+                chr: 'chr5',
+                start: 111222333,
+                end: 111222350,
+                motif: 'MA0003.3',
+                strand: '-',
+                pvalue: 8.90e-09,
+                tefamily: 'SVA',
+                class: 'Retrotransposon',
+                length: 17
+            }
+        ];
+
+        let filteredData = [...originalData];
+        let currentSort = { column: -1, ascending: true };
+
+        function initializeDashboard() {
+            populateFilters();
+            updateStats();
+            updateTable();
+            updateChart();
+        }
+
+        function populateFilters() {
+            const chromosomes = [...new Set(originalData.map(d => d.chr))].sort();
+            const motifs = [...new Set(originalData.map(d => d.motif))].sort();
+            const classes = [...new Set(originalData.map(d => d.class))].sort();
+            const families = [...new Set(originalData.map(d => d.tefamily))].sort();
+
+            populateSelect('chromosomeFilter', chromosomes);
+            populateSelect('motifFilter', motifs);
+            populateSelect('classFilter', classes);
+            populateSelect('familyFilter', families);
+        }
+
+        function populateSelect(selectId, options) {
+            const select = document.getElementById(selectId);
+            const currentValue = select.value;
+            
+            // Clear existing options except the first one
+            while (select.children.length > 1) {
+                select.removeChild(select.lastChild);
+            }
+            
+            options.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            });
+            
+            select.value = currentValue;
+        }
+
+        function applyFilters() {
+            const chromosome = document.getElementById('chromosomeFilter').value;
+            const motif = document.getElementById('motifFilter').value;
+            const strand = document.getElementById('strandFilter').value;
+            const classFilter = document.getElementById('classFilter').value;
+            const family = document.getElementById('familyFilter').value;
+            const maxPvalue = parseFloat(document.getElementById('pvalueFilter').value);
+            const minLength = parseInt(document.getElementById('lengthFilter').value);
+
+            filteredData = originalData.filter(d => {
+                return (!chromosome || d.chr === chromosome) &&
+                       (!motif || d.motif === motif) &&
+                       (!strand || d.strand === strand) &&
+                       (!classFilter || d.class === classFilter) &&
+                       (!family || d.tefamily === family) &&
+                       (!maxPvalue || d.pvalue <= maxPvalue) &&
+                       (!minLength || d.length >= minLength);
+            });
+
+            updateStats();
+            updateTable();
+            updateChart();
+        }
+
+        function updateStats() {
+            document.getElementById('totalRecords').textContent = filteredData.length;
+            document.getElementById('uniqueChromosomes').textContent = 
+                new Set(filteredData.map(d => d.chr)).size;
+            document.getElementById('uniqueMotifs').textContent = 
+                new Set(filteredData.map(d => d.motif)).size;
+        }
+
+        function updateTable() {
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+
+            filteredData.forEach(d => {
+                const row = tbody.insertRow();
+                row.insertCell(0).textContent = d.chr;
+                row.insertCell(1).textContent = d.start.toLocaleString();
+                row.insertCell(2).textContent = d.end.toLocaleString();
+                row.insertCell(3).textContent = d.motif;
+                row.insertCell(4).textContent = d.strand;
+                row.insertCell(5).textContent = d.pvalue.toExponential(2);
+                row.insertCell(6).textContent = d.tefamily;
+                row.insertCell(7).textContent = d.class;
+                row.insertCell(8).textContent = d.length;
+            });
+        }
+
+        function updateChart() {
+            // Count hits per chromosome
+            const chromosomeCounts = {};
+            
+            filteredData.forEach(d => {
+                chromosomeCounts[d.chr] = (chromosomeCounts[d.chr] || 0) + 1;
+            });
+
+            // Sort chromosomes naturally (chr1, chr2, ..., chr10, ..., chrX, chrY)
+            const sortedChromosomes = Object.keys(chromosomeCounts).sort((a, b) => {
+                const aNum = a.replace('chr', '');
+                const bNum = b.replace('chr', '');
+                
+                // Handle non-numeric chromosomes (X, Y, M)
+                if (isNaN(aNum) && isNaN(bNum)) return aNum.localeCompare(bNum);
+                if (isNaN(aNum)) return 1;
+                if (isNaN(bNum)) return -1;
+                
+                return parseInt(aNum) - parseInt(bNum);
+            });
+
+            const counts = sortedChromosomes.map(chr => chromosomeCounts[chr]);
+            
+            // Create gradient colors for bars
+            const colors = sortedChromosomes.map((_, i) => 
+                `rgba(${102 + i * 15}, ${126 + i * 10}, ${234 - i * 5}, 0.8)`
+            );
+
+            const trace = {
+                x: sortedChromosomes,
+                y: counts,
+                type: 'bar',
+                marker: {
+                    color: colors,
+                    line: {
+                        color: 'rgba(102, 126, 234, 1)',
+                        width: 2
+                    }
+                },
+                hovertemplate: '<b>%{x}</b><br>Hits: %{y}<br><extra></extra>'
+            };
+
+            const layout = {
+                title: '',
+                xaxis: { 
+                    title: 'Chromosome',
+                    tickangle: -45
+                },
+                yaxis: { title: 'Number of Hits' },
+                showlegend: false,
+                margin: { l: 60, r: 50, t: 20, b: 80 },
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                font: {
+                    family: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
+                    size: 12
+                }
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false
+            };
+
+            Plotly.newPlot('chromosomeChart', [trace], layout, config);
+        }
+
+        function sortTable(columnIndex) {
+            const ascending = currentSort.column === columnIndex ? !currentSort.ascending : true;
+            currentSort = { column: columnIndex, ascending };
+
+            const columns = ['chr', 'start', 'end', 'motif', 'strand', 'pvalue', 'tefamily', 'class', 'length'];
+            const sortKey = columns[columnIndex];
+
+            filteredData.sort((a, b) => {
+                let aVal = a[sortKey];
+                let bVal = b[sortKey];
+                
+                if (typeof aVal === 'string') {
+                    aVal = aVal.toLowerCase();
+                    bVal = bVal.toLowerCase();
+                }
+                
+                if (aVal < bVal) return ascending ? -1 : 1;
+                if (aVal > bVal) return ascending ? 1 : -1;
+                return 0;
+            });
+
+            updateTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('chromosomeFilter').value = '';
+            document.getElementById('motifFilter').value = '';
+            document.getElementById('strandFilter').value = '';
+            document.getElementById('classFilter').value = '';
+            document.getElementById('familyFilter').value = '';
+            document.getElementById('pvalueFilter').value = '';
+            document.getElementById('lengthFilter').value = '';
+            
+            filteredData = [...originalData];
+            updateStats();
+            updateTable();
+            updateChart();
+        }
+
+        // Event listeners
+        document.getElementById('chromosomeFilter').addEventListener('change', applyFilters);
+        document.getElementById('motifFilter').addEventListener('change', applyFilters);
+        document.getElementById('strandFilter').addEventListener('change', applyFilters);
+        document.getElementById('classFilter').addEventListener('change', applyFilters);
+        document.getElementById('familyFilter').addEventListener('change', applyFilters);
+        document.getElementById('pvalueFilter').addEventListener('input', applyFilters);
+        document.getElementById('lengthFilter').addEventListener('input', applyFilters);
+
+        // Initialize dashboard
+        initializeDashboard();
+    </script>
+</body>
+</html>
